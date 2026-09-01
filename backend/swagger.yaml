@@ -1,0 +1,1412 @@
+openapi: 3.1.0
+info:
+    title: My Sample API
+    description: A brief description of what this API does.
+    version: 1.0.0
+
+servers:
+    - url: http://localhost:5000
+      description: Production server
+
+tags:
+    - name: public
+      description: Public resource all users can access
+    - name: auth
+      description: Login users
+    - name: users | admin
+      description: User administration(admin only)
+    - name: users | management
+      description: Employee management for managers
+    - name: services
+      description: For managing services
+    - name: customers
+      description: For managing customers
+
+paths:
+    /auth/login:
+        post:
+            tags:
+                - auth
+                - public
+            summary: Login
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/auth"
+
+            responses:
+                "200":
+                    description: Sucess
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: object
+                                              properties:
+                                                  user:
+                                                      type: object
+                                                      properties:
+                                                          user_id:
+                                                              type: string
+                                                              description: uuid v7 string
+                                                          user_name:
+                                                              type: string
+                                                  token:
+                                                      type: string
+                                                      description: JWT token
+                            examples:
+                                Success:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            user:
+                                                user_id: "019c3d39-2d5a-7b84-9994-9ca7d1ec6db7"
+                                                user_name: "admin"
+                                                user_role: admin
+                                            token: "eyJhbG...b4RjLSrk"
+                "401":
+                    description: "Unauthorized" # Must redefine description
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                            example:
+                                success: false
+                                message: "Invalid credentials"
+                "422":
+                    $ref: "#/components/responses/UnprocessableSyntax"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+    /api/users:
+        get:
+            tags:
+                - users | admin
+            summary: Get all users (admin only)
+            description: |
+                Retrieves a list of users sorted by name. You can filter by phone number or name.
+                Note: If both are provided, the API prioritizes filtering by phone number. 
+                If none are provided, return all users. When filtering by phone number will sort result with it.
+            parameters:
+                - name: user_phone
+                  in: query
+                  description: Filter by phone number (prefix match).
+                  required: false
+                  schema:
+                      type: string
+                      example: "09"
+                - name: user_name
+                  in: query
+                  description: Filter by name (case-insensitive, unaccented search).
+                  required: false
+                  schema:
+                      type: string
+                      example: "Nguyen"
+                - $ref: "#/components/parameters/Limit"
+                - $ref: "#/components/parameters/NextPage"
+
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: object
+                                              properties:
+                                                  results:
+                                                      type: array
+                                                      items:
+                                                          $ref: "#/components/schemas/user"
+                                                  next_page:
+                                                      type: string
+                            examples:
+                                success:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            results:
+                                                [
+                                                    {
+                                                        "user_id": "019cbeaa-5df2-7978-a74a-75df12a341b2",
+                                                        "user_name": "Lê Hoàng C",
+                                                        "user_role": "employee",
+                                                        "user_phone": "0900000003",
+                                                        "user_status": "active"
+                                                    },
+                                                    {
+                                                        "user_id": "019cbeaa-5ded-77bf-9a79-4cae6e050652",
+                                                        "user_name": "Nguyễn Văn A",
+                                                        "user_role": "admin",
+                                                        "user_phone": "0900000001",
+                                                        "user_status": "active"
+                                                    }
+                                                ]
+                                            next_page: "Tmd1eeG7hW4gVsSDbiBBfDAxOWNiZWFhLTVkZWQtNzdiZi05YTc5LTRjYWU2ZTA1MDY1Mg=="
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "422":
+                    $ref: "#/components/responses/UnprocessableSyntax"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+        post:
+            tags:
+                - users | admin
+            summary: Create a new user with no restriction(admin only)
+            parameters: 
+                - $ref: "#/components/parameters/IdempotencyKey"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                user_name:
+                                    type: string
+                                    description: name of the user
+                                user_role:
+                                    $ref: "#/components/schemas/user_role_enum"
+                                user_phone:
+                                    type: string
+                                    description: phone number of the user
+                                password:
+                                    type: string
+                                    description: password of the user
+            responses:
+                "201":
+                    description: Created
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              $ref: "#/components/schemas/user"
+                            examples:
+                                success:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            user_id: "019c3ba7-7c39-7ae4-b1a3-a08f58f70a6f"
+                                            user_name: "Lê Văn C"
+                                            user_phone: "0901234569"
+                                            user_role: "manager"
+                                            user_status: "active"
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                '409':
+                    $ref: '#/components/responses/IdempotencyConflict'
+                "422":
+                    $ref: "#/components/responses/UnprocessableSyntax"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+    /api/users/{id}:
+        patch:
+            tags:
+                - users | admin
+            summary: Update everything about an user (admin only)
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                      description: uuid v7 string
+                      example: 019c37c3-430d-7de8-9295-4540b874d9b8
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                user_name:
+                                    type: string
+                                    description: name of the user
+                                user_role:
+                                    $ref: "#/components/schemas/user_role_enum"
+                                user_phone:
+                                    type: string
+                                    description: phone number of the user
+                                password:
+                                    type: string
+                                    description: password of the user
+                                user_status:
+                                    $ref: "#/components/schemas/user_status_enum"
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              $ref: "#/components/schemas/user"
+                            examples:
+                                success:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            user_id: "019c3ba7-7c39-7ae4-b1a3-a08f58f70a6f"
+                                            user_name: "Lê Văn C"
+                                            user_phone: "0901234569"
+                                            user_role: "manager"
+                                            user_status: "active"
+                "400":
+                    $ref: "#/components/responses/BadRequest"
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "404":
+                    description: User not found or already deleted
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                no_user:
+                                    summary: User not found
+                                    value:
+                                        success: false
+                                        message: User not found
+                "422":
+                    $ref: "#/components/responses/UnprocessableSyntax"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+        delete:
+            tags:
+                - users | admin
+            summary: Soft-delete an user (admin only)
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                      description: uuid v7 string
+                      example: 019c37c3-430d-7de8-9295-4540b874d9b8
+            responses:
+                "204":
+                    $ref: "#/components/responses/NoContent"
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "404":
+                    description: User not found or already deleted
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                no_user:
+                                    summary: User not found
+                                    value:
+                                        success: false
+                                        message: User not found
+                "500":
+                    $ref: "#/components/responses/InternalError"
+    /api/users/employees:
+        get:
+            tags:
+                - users | management
+            summary: Get all employees
+            description: |
+                Retrieves a list of employees. You can filter by phone number or name. 
+                Note: If both are provided, the API prioritizes filtering by phone number. 
+                If none are provided, return all employees. When filtering by phone number will sort result with it.
+            parameters:
+                - name: user_phone
+                  in: query
+                  description: Filter by employee phone number (prefix match).
+                  required: false
+                  schema:
+                      type: string
+                      example: "09"
+                - name: user_name
+                  in: query
+                  description: Filter by employee name (case-insensitive, unaccented search).
+                  required: false
+                  schema:
+                      type: string
+                      example: "Nguyen"
+                - name: limit
+                  in: query
+                  description: Limit the number of results per page.
+                  required: false
+                  schema:
+                      type: integer
+                      example: 2
+                - name: next_page
+                  in: query
+                  description: Get the starting page of results. Base64 encoded string.
+                  required: false
+                  schema:
+                      type: string
+                      example: Tmd1eeG7hW4gVsSDbiBBfDAxOWNiZWFhLTVkZWQtNzdiZi05YTc5LTRjYWU2ZTA1MDY1Mg==
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: array
+                                              items:
+                                                  $ref: "#/components/schemas/user"
+                            examples:
+                                success:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            - user_id: "019c3ba7-7c39-7ae4-b1a3-a08f58f70a6f"
+                                              user_name: "Nguyễn Văn A"
+                                              user_phone: "0901234567"
+                                              user_role: "employee"
+                                              user_status: "active"
+                                            - user_id: "019c3ba7-7c39-74fb-8f36-18fd9e6f48ec"
+                                              user_name: "Trần Thị B"
+                                              user_phone: "0912345678"
+                                              user_role: "employee"
+                                              user_status: "active"
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+        post:
+            tags:
+                - users | management
+            summary: Create a new employee (management only)
+            parameters: 
+                - $ref: "#/components/parameters/IdempotencyKey"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                user_name:
+                                    type: string
+                                    description: name of the user
+                                user_phone:
+                                    type: string
+                                    description: phone number of the user
+                                password:
+                                    type: string
+                                    description: password of the user
+            responses:
+                "201":
+                    description: |
+                      Created successfully.
+                      Note: If the Idempotency-Key is reused, this returns the cached response.
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              $ref: "#/components/schemas/user"
+                            examples:
+                                success:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            user_name: "Nguyễn Văn A"
+                                            user_phone: "0901234567"
+                                            user_status: active
+                                            user_role: employee
+                "400":
+                    $ref: "#/components/responses/MissingIdempotencyKey"
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                '409':
+                    $ref: '#/components/responses/IdempotencyConflict'
+                '422':
+                    description: Unprocessable Entity(Validation or Idempotency issue)
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                  - $ref: "#/components/schemas/UnprocessableSyntax"
+                                  - $ref: "#/components/schemas/IdempotencyHashMismatch"
+                            examples:
+                                syntax_error:
+                                    summary: Syntax error
+                                    value:
+                                        success: false
+                                        message: "The request cannot be fulfilled due to bad syntax."
+                                        error:
+                                            [
+                                              {
+                                                "type": "string",
+                                                "value": "string",
+                                                "msg": "string",
+                                                "path": "string",
+                                                "location": "string"
+                                              }
+                                            ]
+                                idempotency_error:
+                                    summary: Idempotency error
+                                    value:
+                                        success: false
+                                        message: "This key was previously used with a different request body."
+                                        error: "Idempotency Key reuse error"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+    /api/users/employees/{id}:
+        patch:
+            tags:
+                - users | management
+            summary: Update an employee
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                      description: uuid v7 string
+                      example: 019c37c3-430d-7de8-9295-4540b874d9b8
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                user_name:
+                                    type: string
+                                    description: name of the user
+                                    example: "Phạm Minh D"
+                                user_phone:
+                                    type: string
+                                    description: phone number of the user
+                                    example: "0900000004"
+                                user_status:
+                                    $ref: "#/components/schemas/user_status_enum"
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              $ref: "#/components/schemas/user"
+
+                "400":
+                    description: Bad request
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/UnprocessableSyntax"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                bad_syntax:
+                                    summary: Bad request syntax
+                                    value:
+                                        success: false
+                                        message: "The request cannot be fulfilled due to bad syntax"
+                                        error:
+                                            [
+                                                {
+                                                    type: "field",
+                                                    value: "a",
+                                                    msg: "Invalid phone number",
+                                                    path: "user_phone",
+                                                    location: "body",
+                                                },
+                                            ]
+                                no_fields:
+                                    summary: No fields to update
+                                    value:
+                                        success: false
+                                        message: "No fields to update"
+
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "404":
+                    description: Employee not found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                no_user:
+                                    summary: Employee not found
+                                    value:
+                                        success: false
+                                        message: User not found or deleted
+                "500":
+                    $ref: "#/components/responses/InternalError"
+        delete:
+            tags:
+                - users | management
+            summary: Soft-delete an employee
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                      description: uuid v7 string
+                      example: 019c37c3-430d-7de8-9295-4540b874d9b8
+            responses:
+                "204":
+                    $ref: "#/components/responses/NoContent"
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "404":
+                    description: User not found or already deleted
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                no_user:
+                                    summary: User not found
+                                    value:
+                                        success: false
+                                        message: User not found or already deleted
+                "500":
+                    $ref: "#/components/responses/InternalError"
+    /api/users/self:
+        get:
+            tags:
+                - public
+            summary: Get current own user info
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              $ref: "#/components/schemas/user"
+                "404":
+                    description: User not found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                no_user:
+                                    summary: User not found
+                                    value:
+                                        success: false
+                                        message: User not found
+                "500":
+                    $ref: "#/components/responses/InternalError"
+    /api/services:
+        get:
+            tags:
+                - public
+                - services
+            summary: Get all services
+            parameters:
+                - name: service_name
+                  in: query
+                  description: Filter by service name (case-insensitive, unaccented search).
+                  required: false
+                  schema:
+                      type: string
+                      example: "Giat"
+                - $ref: "#/components/parameters/Limit"
+                - $ref: "#/components/parameters/NextPage"
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: array
+                                              items:
+                                                  $ref: "#/components/schemas/service"
+                            examples:
+                                all_services:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            - service_id: "019c37c3-4300-7fa6-9dd9-e274ee18d683"
+                                              service_name: "Cotton Áo khoác (Giặt khô)"
+                                              service_unit: "cái"
+                                              service_price_per_unit: 105
+                                            - service_id: "019c37c3-4302-770a-ac89-b5d0683061fa"
+                                              service_name: "Cotton Áo khoác (Giặt tay)"
+                                              service_unit: "cái"
+                                              service_price_per_unit: 95
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+        post:
+            tags:
+                - services
+            summary: Create a new service
+            parameters: 
+                - $ref: "#/components/parameters/IdempotencyKey"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                service_name:
+                                    type: string
+                                    description: name of the service
+                                    example: "Cotton Áo khoác (Giặt khô)"
+                                service_unit:
+                                    type: string
+                                    description: unit of the service
+                                    example: "cái"
+                                service_price_per_unit:
+                                    type: number
+                                    description: price per unit of the service
+                                    example: 105
+            responses:
+                "201":
+                    description: Created
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/SuccessResponse"
+                            examples:
+                                success:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            service_id: "019c37c3-4300-7fa6-9dd9-e274ee18d683"
+                                            service_name: "Cotton Áo khoác (Giặt khô)"
+                                            service_unit: "cái"
+                                            service_price_per_unit: 105
+                "400":
+                    $ref: "#/components/responses/UnprocessableSyntax"
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+    /api/services/{id}:
+        patch:
+            tags:
+                - services
+            summary: Update a service
+            parameters:
+                - name: id
+                  in: path
+                  description: ID of the service
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                      example: "019c37c3-4302-770a-ac89-b5d0683061fa"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                service_name:
+                                    type: string
+                                    description: name of the service
+                                    example: "Cotton Áo khoác (Giặt khô)"
+                                service_unit:
+                                    type: string
+                                    description: unit of the service
+                                    example: "cái"
+                                service_price_per_unit:
+                                    type: number
+                                    description: price per unit of the service
+                                    example: 105
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              $ref: "#/components/schemas/service"
+                            examples:
+                                success:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            service_id: "019c37c3-4302-770a-ac89-b5d0683061fa"
+                                            service_name: "Cotton Áo khoác (Giặt khô)"
+                                            service_unit: "cái"
+                                            service_price_per_unit: 105
+                "400":
+                    description: Bad request
+                    content:
+                        application/json:
+                            schema:
+                                oneOf:
+                                    - $ref: "#/components/schemas/UnprocessableSyntax"
+                                    - $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                bad_syntax:
+                                    summary: Bad request syntax
+                                    value:
+                                        success: false
+                                        message: "The request cannot be fulfilled due to bad syntax"
+                                        error:
+                                            [
+                                                {
+                                                    type: "field",
+                                                    value: "a",
+                                                    msg: "Invalid phone number",
+                                                    path: "user_phone",
+                                                    location: "body",
+                                                },
+                                            ]
+                                no_fields:
+                                    summary: No fields to update
+                                    value:
+                                        success: false
+                                        message: "No fields to update"
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "404":
+                    description: User not found or deleted
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                no_user:
+                                    summary: User not found
+                                    value:
+                                        success: false
+                                        message: User not found or deleted
+                "500":
+                    $ref: "#/components/responses/InternalError"
+
+        delete:
+            tags:
+                - services
+            summary: Soft-delete a service
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                      description: uuid v7 string
+                      example: "019c37c3-4302-770a-ac89-b5d0683061fa"
+            responses:
+                "204":
+                    $ref: "#/components/responses/NoContent"
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "404":
+                    description: Service not found or already deleted
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                no_service:
+                                    summary: Service not found
+                                    value:
+                                        success: false
+                                        message: Service not found or already deleted
+                "500":
+                    $ref: "#/components/responses/InternalError"
+    /api/customers:
+        get:
+            tags:
+                - customers
+                - public
+            summary: Get all customers
+            description: |
+                Retrieves the list of customers. You can filter by phone number or name. 
+                Note: If both are provided, the API prioritizes filtering by phone number. 
+                If none are provided, return all customers. When filtering by phone number will sort result with it.
+            parameters:
+                - name: customer_phone
+                  in: query
+                  description: Filter by customer phone number (prefix match).
+                  required: false
+                  schema:
+                      type: string
+                      example: "09"
+                - name: customer_name
+                  in: query
+                  description: Filter by customer name (case-insensitive, unaccented search).
+                  required: false
+                  schema:
+                      type: string
+                      example: "Nguyen"
+                - $ref: "#/components/parameters/Limit"
+                - $ref: "#/components/parameters/NextPage"
+            responses:
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              type: array
+                                              items:
+                                                  $ref: "#/components/schemas/customer"
+                            examples:
+                                success:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            - customer_id: "019c37c3-430f-77c3-abe7-26137f3c2611"
+                                              customer_name: "Trần Khánh"
+                                              customer_phone: "0900000001"
+                                              customer_address: "Khu phố 2, Phường 2, Quận 2"
+                                              points": 480
+                                            - customer_id: "019c37c3-4316-75b4-8126-988ea43148ae"
+                                              customer_name: "Lê Dũng"
+                                              customer_phone: "0900000002"
+                                              customer_address: "Khu phố 3, Phường 3, Quận 3"
+                                              points: 103
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+        post:
+            tags:
+                - customers
+                - public
+            summary: Create a new customer
+            description: |
+                Creates a new customer. Name and phone number required. 
+                Address and points are optional(will default as null and 0 respectively)
+            parameters: 
+                - $ref: "#/components/parameters/IdempotencyKey"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                customer_name:
+                                    type: string
+                                    description: name of the customer
+                                    example: "Lê Dũng"
+                                customer_phone:
+                                    type: string
+                                    description: phone number of the customer
+                                    example: "0900000002"
+                                customer_address:
+                                    type: string
+                                    description: address of the customer
+                                    example: ""
+                                points:
+                                    type: number
+                                    description: points of the customer
+                                    example: 0
+            responses:
+                "201":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              $ref: "#/components/schemas/customer"
+                            examples:
+                                success:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            customer_name: "Lê Dũng"
+                                            customer_phone: "0900000002"
+                                            customer_address: null
+                                            points: 0
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "500":
+                    $ref: "#/components/responses/InternalError"
+    /api/customers/{id}:
+        patch:
+            summary: Update a customer
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                      description: uuid v7 string
+                      example: 019c37c3-430d-7de8-9295-4540b874d9b8
+                - $ref: "#/components/parameters/IdempotencyKey"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                customer_name:
+                                    type: string
+                                    example: "Lê Dũng"
+                                customer_phone:
+                                    type: string
+                                    example: "0900000002"
+                                customer_address:
+                                    type: string
+                                    example: "Khu phố 3, Phường 3, Quận 3"
+                                points:
+                                    type: number
+                                    example: 0
+            tags:
+                - customers
+            responses:              
+                "200":
+                    description: Success
+                    content:
+                        application/json:
+                            schema:
+                                allOf:
+                                    - $ref: "#/components/schemas/SuccessResponse"
+                                    - type: object
+                                      properties:
+                                          data:
+                                              $ref: "#/components/schemas/customer"
+                            examples:
+                                success:
+                                    summary: Success
+                                    value:
+                                        success: true
+                                        data:
+                                            customer_id: "019c37c3-4316-75b4-8126-988ea43148ae"
+                                            customer_name: "Lê Dũng"
+                                            customer_phone: "0900000002"
+                                            customer_address: "Khu phố 3, Phường 3, Quận 3"
+                                            points: 0
+                "400":
+                    $ref: "#/components/responses/BadRequest"
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "404":
+                    description: User not found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                no_user:
+                                    summary: User not found
+                                    value:
+                                        success: false
+                                        message: User not found              
+                "422":
+                    $ref: "#/components/responses/UnprocessableSyntax"
+                "500":
+                    $ref: "#/components/responses/InternalError"            
+        delete:
+            tags:
+              - customers
+            summary: Soft-delete a customer from the system
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+                      description: uuid v7 string
+                      example: "019c37c3-4316-75b4-8126-988ea43148ae"
+            responses:
+                "204":
+                    $ref: "#/components/responses/NoContent"
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+                "403":
+                    $ref: "#/components/responses/Forbidden"
+                "404":
+                    description: Customer not found
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                no_user:
+                                    summary: Customer not found
+                                    value:
+                                        success: false
+                                        message: Customer not found
+                "500":
+                    $ref: "#/components/responses/InternalError"
+
+components:
+    parameters:
+        IdempotencyKey:
+            in: header
+            name: Idempotency-Key
+            description: >
+              A unique UUID to identify the request. 
+              Used to prevent duplicate operations in case of network retries.
+            required: true
+            schema:
+                type: string
+                format: uuid
+                example: "550e8400-e29b-41d4-a716-446655440000"
+        Limit:
+            name: limit
+            in: query
+            description: Limit the number of results per page, maximum 100.
+            required: false
+            schema:
+                type: integer
+                minimum: 1
+                maximum: 100
+                example: 2
+        NextPage:
+            name: next_page
+            in: query
+            description: Get the starting page of results. Base64 encoded string.
+            required: false
+            schema:
+                type: string
+                example: Tmd1eeG7hW4gVsSDbiBBfDAxOWNiZWFhLTVkZWQtNzdiZi05YTc5LTRjYWU2ZTA1MDY1Mg==
+    schemas:
+        ValidationError:
+            type: object
+            properties:
+                type:
+                    type: string
+                value:
+                    type: string
+                msg:
+                    type: string
+                path:
+                    type: string
+                location:
+                    type: string
+        user_role_enum:
+            type: string
+            enum:
+                - employee
+                - manager
+                - admin
+        user_status_enum:
+            type: string
+            enum:
+                - active
+                - suspended
+        auth:
+            type: object
+            properties:
+                user_phone:
+                    type: string
+                    example: "1234567890"
+                password:
+                    type: string
+                    example: "password"
+        user:
+            type: object
+            properties:
+                user_id:
+                    type: string
+                    format: uuid
+                    description: uuid v7 string
+                user_name:
+                    type: string
+                    description: name of the user
+                user_role:
+                    $ref: "#/components/schemas/user_role_enum"
+                user_status:
+                    $ref: "#/components/schemas/user_status_enum"
+                user_phone:
+                    type: string
+                    description: phone number of the user
+        SuccessResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+                    enum: [true]
+                    default: true
+                data:
+                    oneOf:
+                        - type: object
+                        - type: array
+                          items:
+                              type: object
+                    description: The actual response payload
+        ErrorResponse:
+            type: object
+            properties:
+                success:
+                    type: boolean
+                    enum: [false]
+                    default: false
+                message:
+                    description: A human-readable explanation of the error.
+        service:
+            type: object
+            properties:
+                service_id:
+                    type: string
+                    format: uuid
+                    description: uuid v7 string
+                service_name:
+                    type: string
+                    description: name of the service
+                service_unit:
+                    type: string
+                    description: unit of the service
+                service_price_per_unit:
+                    type: number
+                    description: price per unit of the service
+        customer:
+            properties:
+                customer_id:
+                    type: string
+                    format: uuid
+                    description: uuid v7 string
+                customer_name:
+                    type: string
+                    description: name of the customer
+                customer_phone:
+                    type: string
+                    description: phone number of the customer
+                customer_address:
+                    type: string
+                    description: address of the customer
+                points:
+                    type: number
+                    description: points of the customer
+        UnprocessableSyntax:
+            allOf:
+                - $ref: "#/components/schemas/ErrorResponse"
+                - type: object
+                  properties:
+                      error:
+                          type: array
+                          items:
+                              $ref: "#/components/schemas/ValidationError"
+        IdempotencyHashMismatch:
+            allOf:
+                - $ref: "#/components/schemas/ErrorResponse"
+                - type: object
+                  properties:
+                    error:
+                      type: string
+                    message:
+                      type: string
+        
+    responses:
+        MissingIdempotencyKey:
+            description: The request is missing the Idempotency-Key header
+            content:
+                application/json:
+                    schema:
+                        $ref: "#/components/schemas/ErrorResponse"
+                    examples:
+                        no_idempotency_key:
+                            summary: Missing Idempotency-Key header
+                            value:
+                                success: false
+                                message: Missing idempotency key
+        NoContent:
+            description: The request finished successfully but with no content
+            content:
+                application/json:
+                    schema:
+                        $ref: "#/components/schemas/SuccessResponse"
+                    examples:
+                        success:
+                            summary: Success
+                            value:
+                                success: true
+                                data: null
+
+        UnprocessableSyntax:
+            description: The request cannot be fulfilled due to bad syntax
+            content:
+                application/json:
+                    schema:
+                        allOf:
+                            - $ref: "#/components/schemas/ErrorResponse"
+                            - type: object
+                              properties:
+                                  error:
+                                      type: array
+                                      items:
+                                          $ref: "#/components/schemas/ValidationError"
+
+        BadRequest:
+            description: The request cannot be fulfilled due to bad syntax
+            content:
+                application/json:
+                    schema:
+                        $ref: "#/components/schemas/ErrorResponse"
+                    examples:
+                        bad_request:
+                            summary: Bad request
+                            value:
+                                success: false
+                                message: No fields to update.
+
+        Forbidden:
+            description: The request cannot be fulfilled due to lack of permission
+            content:
+                application/json:
+                    schema:
+                        $ref: "#/components/schemas/ErrorResponse"
+                    examples:
+                        no_permission:
+                            summary: User don't have necessary permission
+                            value:
+                                success: false
+                                message: Access denied
+
+        Unauthorized:
+            description: The request cannot be fulfilled due to lack of authentication
+            content:
+                application/json:
+                    schema:
+                        $ref: "#/components/schemas/ErrorResponse"
+                    examples:
+                        missing_token:
+                            summary: User has no token
+                            value:
+                                success: false
+                                message: No token provided
+
+                        invalid_token:
+                            summary: User's token is expired or no longer valid
+                            value:
+                                success: false
+                                message: Invalid token
+        
+        IdempotencyConflict:
+          description: Request already in progress (Locked).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ErrorResponse"
+                  - type: object
+                    properties:
+                      message:
+                        type: string
+                        example: "Request already in progress."
+        
+        IdempotencyHashMismatch:
+          description: The key was reused but the request body has changed.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ErrorResponse"
+                  - type: object
+                    properties:
+                      error:
+                        type: string
+                      message:
+                        type: string
+
+        InternalError:
+            description: Internal server error
+            content:
+                application/json:
+                    schema:
+                        $ref: "#/components/schemas/ErrorResponse"
+                    example:
+                        success: false
+                        message: Internal Server Error.
+    securitySchemes:
+        bearerAuth: # arbitrary name for the security scheme
+            type: http
+            scheme: bearer
+            bearerFormat: JWT
+security:
+    - bearerAuth: []

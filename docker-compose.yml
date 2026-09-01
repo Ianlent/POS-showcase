@@ -9,7 +9,7 @@ services:
         ports:
             - "5432:5432"
         volumes:
-            - ./backend/postgresForSetup/pos.sql:/docker-entrypoint-initdb.d/01-schema.sql
+            - ./backend/postgresForSetup/init.sql:/docker-entrypoint-initdb.d/01-schema.sql
             - ./backend/postgresForSetup/mockdata.sql:/docker-entrypoint-initdb.d/02-mockdata.sql
         healthcheck:
             test:
@@ -44,13 +44,16 @@ services:
         ports:
             - "5000:5000"
             - "8080:8080" # Docs port
+        command: sh -c "node setup.js && npm run dev"
 
     frontend:
-        build: ./frontend
+        build:
+            context: ./frontend
+            target: production
+            args:
+                - VITE_API_BASE_URL=
         container_name: crm_frontend
-        environment:
-            - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:5000}
         ports:
-            - "3000:3000"
+            - "3000:80"
         depends_on:
             - backend

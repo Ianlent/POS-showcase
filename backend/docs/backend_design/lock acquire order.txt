@@ -1,0 +1,10 @@
+lock acquire order(create order):
+customers
+users
+services
+
+lock acquire order(update order):
+order
+
+lock acquire order(soft delete order):
+order
