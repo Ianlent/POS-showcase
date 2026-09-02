@@ -63,11 +63,10 @@ Once the containers are running, you can access the various services at the foll
 
 ### Default Admin Credentials
 
-To log in to the application for the first time, use the automatically seeded administrator account:
+To log in to the application for the first time, use the automatically seeded administrator account[cite: 7]:
 
-* **Username:** `admin`
-
-* **Password:** `password`
+- **Phone Number:** `0988888888`
+- **Password:** `password`
 
 
 ---
@@ -94,13 +93,18 @@ docker compose down
 
 ```
 
-
 * **Stop and clear database persistent data:**
 ```bash
 docker compose down -v
 
 ```
+## 📌 Development Status & Showcase Notes
 
+This showcase represents a stable development snapshot of the application. Please note the following operational context:
+
+- **Showcase Scope:** Core infrastructure—including the database engine, idempotency lifecycle, real-time SSE sync, order processing, and CRUD modules—is fully operational[cite: 1, 4].
+- **Work in Progress (Dashboard):** The main Dashboard view (`/admin/.../dashboard`) currently renders UI placeholders and is not yet wired to live API metrics. To test fully integrated workflows, log in with phone number `0988888888` / password `password` and navigate to other pages via the topbar menu.
+- **First-Boot Initialization:** On the very first run of `docker compose up`, PostgreSQL populates a large dataset (100,000+ records) via `mockdata.sql`. The backend container automatically executes `setup.js` to poll the database and retry until mock data setup and admin seeding complete before opening API ports.
 
 ---
 
