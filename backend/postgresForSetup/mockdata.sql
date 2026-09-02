@@ -34,7 +34,8 @@ SELECT
     (ARRAY['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Vũ', 'Phan', 'Huỳnh', 'Đặng', 'Bùi'])[floor(random() * 10 + 1)] || ' ' || 
     (ARRAY['Anh', 'Bảo', 'Cường', 'Duy', 'Hạnh', 'Khoa', 'Linh', 'Mạnh', 'Nga', 'Sơn', 'Tuấn', 'Vinh', 'Yến', 'Quốc', 'Trang'])[floor(random() * 15 + 1)],
     CASE WHEN i <= 2 THEN 'admin'::user_role_enum ELSE 'employee'::user_role_enum END,
-    '09' || LPAD((floor(random() * 90000000 + 10000000))::text, 8, '0'),
+    (ARRAY['090','091','093','094','096','097','098'])[floor(random() * 7 + 1)] 
+    || LPAD((floor(random() * 10000000))::text, 7, '0'),
     'hash_secure_' || i
 FROM generate_series(1, 20) i;
 
@@ -44,7 +45,12 @@ SELECT
     (ARRAY['Đỗ', 'Hồ', 'Lý', 'Dương', 'Lâm', 'Trịnh', 'Phùng', 'Mai', 'Vương', 'Cao'])[floor(random() * 10 + 1)] || ' ' || 
     (ARRAY['Thanh', 'Hồng', 'Gia', 'Nhật', 'Bích', 'Tấn', 'Ngọc', 'Xuân', 'Trọng', 'Kim'])[floor(random() * 10 + 1)] || ' ' ||
     (ARRAY['Hải', 'Hà', 'Phúc', 'Lộc', 'Thọ', 'Tâm', 'Đức', 'Uyên', 'Vy', 'Nam'])[floor(random() * 10 + 1)],
-    '0' || (ARRAY['3', '5', '7', '8', '9'])[floor(random() * 5 + 1)] || LPAD(i::text, 8, '0'),
+    -- Valid Vietnamese 10-digit mobile number generation
+    (ARRAY['032','033','034','035','036','037','038','039',  -- Viettel
+            '070','079','077','076','078',                -- Mobifone
+            '083','084','085','081','082','088',          -- Vinaphone
+            '056','058','092'])[floor(random() * 21 + 1)]  -- Vietnamobile & 09x
+    || LPAD((floor(random() * 10000000))::text, 7, '0'),
     'Hẻm ' || floor(random() * 99 + 1) || ', Đường ' || (ARRAY['3/2', 'Nguyễn Trãi', 'Lê Hồng Phong', 'Điện Biên Phủ', 'Phan Đăng Lưu'])[floor(random() * 5 + 1)] || ', Q.' || (i%12 + 1),
     (random() * 500)::int
 FROM generate_series(1, 2000) i;
