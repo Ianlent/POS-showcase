@@ -80,7 +80,40 @@ const OrderFormWindow = ({ tabId, onClose }) => {
 		);
 	};
 
+	const getPersistedKey = () => {
+		const storagekey = `idemp_create_order`;
+		let raw = localStorage.getItem(storagekey);
+		let keyData = raw ? JSON.parse(raw) : null;
+
+		// Check if key is expired(24 hours)
+		const isExpired = keyData && Date.now() - keyData.timestamp > 86400000;
+
+		if (!keyData || isExpired) {
+			keyData = {
+				key: crypto.randomUUID(),
+				timestamp: Date.now(),
+			};
+			localStorage.setItem(storagekey, JSON.stringify(keyData));
+		}
+
+		return {
+			key: keyData.key,
+			clear: () => localStorage.removeItem(storagekey),
+		};
+	};
+
+	const handleCreateOrder = async (orderData, idempotencyKey) => {
+		await createOrder({
+			...orderData,
+			headers: {
+				"Idempotency-Key": idempotencyKey,
+			},
+		}).unwrap();
+		messageApi.success("Service created successfully!");
+	};
+
 	const handleSubmitOrder = async (shouldPrint = false) => {
+		const { key, clear } = getPersistedKey();
 		try {
 			const values = await form.validateFields();
 
@@ -110,7 +143,9 @@ const OrderFormWindow = ({ tabId, onClose }) => {
 					? { ...initialPayload, customerInfo: values.customerInfo }
 					: { ...initialPayload, customer_id: values.customer_id };
 
-			await createOrder(finalPayload).unwrap();
+			await handleCreateOrder(finalPayload, key);
+
+			clear();
 
 			messageApi.success(
 				shouldPrint
@@ -126,7 +161,7 @@ const OrderFormWindow = ({ tabId, onClose }) => {
 				messageApi.error("Please complete all required fields.");
 			} else {
 				console.error(error);
-				handleApiError(error);
+				handleApiError(error, clear);
 			}
 		}
 	};

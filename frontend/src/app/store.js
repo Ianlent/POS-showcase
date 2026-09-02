@@ -21,6 +21,7 @@ listenerMiddleware.startListening({
 		// This is where you trigger your global navigate
 		// Assuming you have a router object accessible globally
 		localStorage.clear();
+		sessionStorage.clear();
 	},
 });
 

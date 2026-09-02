@@ -33,8 +33,7 @@ export const createCustomerValidation = [
 		.isLength({ min: 5, max: 100 })
 		.withMessage(
 			"Address must be between 5 and 100 characters if is a string",
-		)
-		.escape(),
+		),
 
 	body("points")
 		.optional()
@@ -71,8 +70,7 @@ export const updateCustomerValidation = [
 		.isLength({ min: 5, max: 100 })
 		.withMessage(
 			"Address must be between 5 and 100 characters if is a string",
-		)
-		.escape(),
+		),
 
 	body("added_points")
 		.optional()

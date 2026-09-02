@@ -105,13 +105,13 @@ export const ServiceRepository = {
 		return result.rows[0];
 	},
 
-	async softDelete(id) {
+	async softDelete(client, id) {
 		const query = `
             UPDATE local_services
             SET is_deleted = TRUE
             WHERE service_id = $1 AND is_deleted = FALSE RETURNING 1;
         `;
-		const result = await pool.query(query, [id]);
+		const result = await client.query(query, [id]);
 		return result.rowCount > 0;
 	},
 

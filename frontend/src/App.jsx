@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Route, Routes, Navigate } from "react-router-dom";
 import "./App.css";
 
@@ -43,11 +43,21 @@ const OrderCreation = lazy(
 );
 
 const App = () => {
-	const { clientId, user } = useSelector((state) => state.auth);
+	const { user } = useSelector((state) => state.auth);
 
-	// Safely extract user_id using optional chaining
 	const user_id = user?.user_id;
-	console.log(`Current Client ID: ${clientId}`);
+	const [clientId] = useState(() => {
+		const existingId = sessionStorage.getItem("clientId");
+
+		if (existingId) {
+			return existingId;
+		}
+
+		console.log("Assigning clientId...");
+		const newId = crypto.randomUUID();
+		sessionStorage.setItem("clientId", newId);
+		return newId;
+	});
 
 	useSSESubscription(clientId);
 

@@ -115,7 +115,7 @@ export const UserRepository = {
 		}
 	},
 
-	async updateUser(id, updateData, is_only_employee = false) {
+	async updateUser(client, id, updateData, is_only_employee = false) {
 		try {
 			const mapping = {
 				user_name: "user_name",
@@ -156,7 +156,7 @@ export const UserRepository = {
 			RETURNING user_id, user_name, user_role, user_status, user_phone, updated_at
 			`;
 
-			const result = await pool.query(sql, values);
+			const result = await client.query(sql, values);
 			return result.rows[0];
 		} catch (err) {
 			switch (err.constraint) {

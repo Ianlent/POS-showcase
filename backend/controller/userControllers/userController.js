@@ -83,14 +83,13 @@ export const updateUserByID = async (req, res, next) => {
 };
 
 // Soft-delete a user by setting is_deleted = TRUE
-export const deleteUserByID = async (req, res) => {
+export const deleteUserByID = async (req, res, next) => {
 	const { clientId } = req;
 	try {
 		const { id } = req.params;
 		await UserService.removeUser(id, clientId);
 		return responseHandler.noContent(res);
 	} catch (err) {
-		console.error(err.message);
-		return responseHandler.error(res, "Internal Server Error");
+		next(err);
 	}
 };

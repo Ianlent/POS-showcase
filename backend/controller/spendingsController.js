@@ -22,7 +22,7 @@ export const getAllTickets = async (req, res, next) => {
 
 export const createTicket = async (req, res, next) => {
 	try {
-		const { clientId, user } = req;
+		const { clientId, user, idempotencyKey } = req;
 		const user_id = user.user_id;
 		const { amount, is_expense, reason, ticket_date } = req.body;
 		const result = await SpendingService.create(

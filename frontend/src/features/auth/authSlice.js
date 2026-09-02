@@ -5,7 +5,6 @@ const authSlice = createSlice({
 	initialState: {
 		user: JSON.parse(localStorage.getItem("user")) || null,
 		isAuthenticated: !!localStorage.getItem("token"),
-		clientId: localStorage.getItem("clientId"),
 	},
 	reducers: {
 		// Called by authApiSlice when login succeeds
@@ -13,12 +12,10 @@ const authSlice = createSlice({
 			const { user, clientId } = action.payload;
 			state.user = user;
 			state.isAuthenticated = true;
-			state.clientId = clientId;
 		},
 		logout: (state) => {
 			state.user = null;
 			state.isAuthenticated = false;
-			state.clientId = null;
 		},
 	},
 });

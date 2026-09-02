@@ -131,7 +131,7 @@ export const UserService = {
 		}
 	},
 
-	async removeUser(user_id, is_only_employee = false, clientId) {
+	async removeUser(user_id, clientId, is_only_employee = false) {
 		const client = await pool.connect();
 		try {
 			await client.query("BEGIN");

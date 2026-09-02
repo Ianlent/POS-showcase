@@ -38,8 +38,6 @@ export const login = async (req, res, next) => {
 			};
 		}
 
-		const clientId = crypto.randomUUID();
-
 		// Generate JWT
 		const token = generateToken({
 			user_id: user.user_id,
@@ -52,7 +50,6 @@ export const login = async (req, res, next) => {
 		return responseHandler.ok(res, {
 			user,
 			token,
-			clientId,
 		});
 	} catch (err) {
 		next(err);

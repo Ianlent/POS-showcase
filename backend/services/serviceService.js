@@ -111,7 +111,7 @@ export const ServiceService = {
 				};
 			}
 			await client.query("COMMIT");
-		} catch (error) {
+		} catch (err) {
 			await client.query("ROLLBACK");
 			throw err;
 		} finally {
