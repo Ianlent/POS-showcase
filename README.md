@@ -1,14 +1,110 @@
-﻿Here is a complete, production-grade `README.md` focused strictly on the technical architecture, data integrity rules, and database engineering of your system.
-
----
-
-# Point-of-Sale & Service CRM System
+﻿# Point-of-Sale & Service CRM System
 
 A high-integrity, event-driven Point-of-Sale (POS) and Customer Relationship Management (CRM) platform designed for localized operational environments (on-premise mini-PC over LAN). Built with a focus on strict database-level invariants, fault-tolerant idempotency, real-time cache synchronization, and $O(\log N)$ query performance under scale.
 
 ---
 
-## 1. System Architecture & Tech Stack
+## 1. Setup & Installation
+## 🚀 Getting Started
+
+Follow these instructions to get the showcase project up and running on your local machine.
+
+### Prerequisites
+
+Make sure you have the following installed on your system:
+- [Docker Engine](https://docs.docker.com/get-docker/) (v20.10.0+)
+- [Docker Compose](https://docs.docker.com/compose/install/) (v2.0.0+)
+
+---
+
+### Installation & Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd <repository-folder>
+
+2. **(Optional) Configure Environment Variables**
+The application comes with default configurations. If you wish to override them, create a `.env` file in the root directory:
+```env
+DB_USER=postgres
+DB_PASSWORD=password123
+DB_NAME=crm_db
+JWT_SECRET=my_demo_secret
+
+```
+
+
+3. **Start the Application**
+Run Docker Compose to build and launch all services (Database, Backend, and Frontend):
+```bash
+docker compose up --build
+
+```
+
+
+Note: On startup, the system will automatically initialize the database schema, load mock data, and run `setup.js` to configure the default admin account.
+
+
+
+---
+
+### Accessing the Services
+
+Once the containers are running, you can access the various services at the following URLs:
+
+| Service | Host Port | Description |
+| --- | --- | --- |
+| **Frontend** | [http://localhost:3000](http://localhost:3000) | Web Application UI |
+| **Backend API** | [http://localhost:5000](http://localhost:5000) | Express / Node.js API |
+| **API Documentation** | [http://localhost:8080](http://localhost:8080) | Swagger / Docs interface |
+| **PostgreSQL Database** | `localhost:5432` | Postgres DB Server |
+---
+
+### Default Admin Credentials
+
+To log in to the application for the first time, use the automatically seeded administrator account:
+
+* **Username:** `admin`
+
+* **Password:** `password`
+
+
+---
+
+### Useful Commands
+
+* **Run containers in the background:**
+```bash
+docker compose up -d --build
+
+```
+
+
+* **View service logs:**
+```bash
+docker compose logs -f
+
+```
+
+
+* **Stop the application:**
+```bash
+docker compose down
+
+```
+
+
+* **Stop and clear database persistent data:**
+```bash
+docker compose down -v
+
+```
+
+
+---
+
+## 2. System Architecture & Tech Stack
 
 ```
                                   +-----------------------+
@@ -44,7 +140,7 @@ A high-integrity, event-driven Point-of-Sale (POS) and Customer Relationship Man
 
 ---
 
-## 2. Idempotency Engine & State Machine
+## 3. Idempotency Engine & State Machine
 
 To prevent double-billing and ghost order creation over unreliable LAN networks or client retries, POST/PUT actions pass through a PostgreSQL-backed idempotency layer with request payload hashing and automatic zombied-lock recovery.
 
@@ -74,7 +170,7 @@ RETURNING *;
 
 ---
 
-## 3. Real-Time Cache Sync (PostgreSQL LISTEN/NOTIFY + SSE)
+## 4. Real-Time Cache Sync (PostgreSQL LISTEN/NOTIFY + SSE)
 
 Client state synchronization avoids WebSocket overhead by leveraging PostgreSQL native pub/sub triggers linked to Express Server-Sent Events (SSE).
 
@@ -111,7 +207,7 @@ sequenceDiagram
 
 ---
 
-## 4. Dual-Track Order State Machine
+## 5. Dual-Track Order State Machine
 
 Fulfillment tracking is decoupled from financial lifecycle rules inside an explicit state machine, enforcing strict invariants across both tracks.
 
@@ -127,7 +223,7 @@ Fulfillment tracking is decoupled from financial lifecycle rules inside an expli
 
 ---
 
-## 5. Database Schema & Dependency Architecture
+## 6. Database Schema & Dependency Architecture
 
 ### Physical Schema ERD
 ![Physical-ERD](design/POS_Physical_ERD.drawio.png)
@@ -191,7 +287,7 @@ $$ LANGUAGE plpgsql;
 
 ---
 
-## 6. Data Access Strategy
+## 7. Data Access Strategy
 
 ### Cursor-Based (Keyset) Pagination
 
@@ -202,7 +298,7 @@ All list endpoints enforce base64-encoded cursor tokens containing a primary sor
 
 ---
 
-## 7. Performance Profiling & Seeding Validation
+## 8. Performance Profiling & Seeding Validation
 
 Query performance was benchmarked using a seed dataset (`mockdata.sql`) simulating multi-year operational activity.
 
