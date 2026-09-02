@@ -144,15 +144,18 @@ This showcase represents a stable development snapshot of the application. Pleas
 
 ---
 
-## 3. Idempotency Engine & State Machine
+## 3. Idempotency Engine & Concurrency Control
 
-To prevent double-billing and ghost order creation over unreliable LAN networks or client retries, POST/PUT actions pass through a PostgreSQL-backed idempotency layer with request payload hashing and automatic zombied-lock recovery.
+To prevent double-billing, ghost order creation over unreliable LAN networks, and race conditions during concurrent multi-user operations, core business transactions combine a PostgreSQL-backed idempotency layer with explicit pessimistic lock modes.
 
-### Execution Flow & Life Cycle
+### A. Idempotency Engine & Lock Stealing
+
+POST/PATCH actions pass through an idempotency layer with request payload hashing and automatic zombied-lock recovery.
+
+#### Execution Flow & Life Cycle
 ![idempotency-key-lifecycle](design/idempotency_key_life_cycle.drawio.png)
 
-### Lock Acquisition Snippet
-
+#### Lock Acquisition Snippet
 Lock reservation is executed using a single atomic PostgreSQL `UPSERT`:
 
 ```sql
@@ -166,11 +169,22 @@ RETURNING *;
 
 ```
 
-### Key Technical Properties
+#### Key Technical Properties
 
-- **Atomic Lock Stealing:** If a backend process crashes mid-flight, locks stuck in `'started'` state for $>5\text{s}$ are safely acquired by subsequent retries.
-- **Payload Verification (`request_hash`):** Requests using an existing key with a modified payload body trigger an immediate `400 Bad Request`.
-- **Transaction Binding:** Key completion (`updateSuccess`) shares the database transaction handle (`client`) of the business operation, committing key completion atomically alongside domain records.
+* **Atomic Lock Stealing:** If a backend process crashes mid-flight, locks stuck in `'started'` state for $>5\text{s}$ are safely acquired by subsequent retries.
+* **Payload Verification (`request_hash`):** Requests using an existing key with a modified payload body trigger an immediate `400 Bad Request`.
+* **Transaction Binding:** Key completion (`updateSuccess`) shares the database transaction handle (`client`) of the business operation, committing key completion atomically alongside domain records.
+
+---
+
+### B. Explicit Pessimistic Locking Strategy
+
+To guarantee strict data integrity during simultaneous cashier transactions, database reads inside core transactional routines (`OrderService`) employ targeted PostgreSQL lock modes:
+
+* **`FOR NO KEY UPDATE` (Mutation & State Locks):** Acquired on customer records (`lockCustomerById`) before updating loyalty points (`points_used` / `points_earned`), as well as on order rows (`fetchAndLockOrder`) during status updates (`updateStatus`) and soft deletions (`removeOrder`). This prevents concurrent transactions from mutating row values or causing race conditions while avoiding unnecessary lock contention on foreign key checks across related tables.
+
+
+* **`FOR SHARE` (Read-Read Shared Guard Locks):** Acquired on handler profiles (`users` via `lockHandlerAndCheckExistence`) and service price definitions (`local_services` via `checkServicesAndLock`) during order creation. This prevents administrators from modifying active staff accounts or changing service price structures mid-transaction, while allowing other cashiers to concurrently read the same reference data without blocking.
 
 ---
 
