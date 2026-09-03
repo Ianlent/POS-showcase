@@ -63,7 +63,7 @@ Once the containers are running, you can access the various services at the foll
 
 ### Default Admin Credentials
 
-To log in to the application for the first time, use the automatically seeded administrator account[cite: 7]:
+To log in to the application for the first time, use the automatically seeded administrator account:
 
 - **Phone Number:** `0988888888`
 - **Password:** `password`
