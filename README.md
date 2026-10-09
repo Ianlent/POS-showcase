@@ -162,8 +162,11 @@ Lock reservation is executed using a single atomic PostgreSQL `UPSERT`:
 INSERT INTO idempotency_keys (idempotency_key, user_id, request_hash, status, locked_at)
 VALUES ($1, $2, $3, 'started', CURRENT_TIMESTAMP)
 ON CONFLICT (user_id, idempotency_key)
-DO UPDATE SET locked_at = EXCLUDED.locked_at
-WHERE idempotency_keys.status = 'started'
+DO UPDATE SET
+  locked_at = EXCLUDED.locked_at,
+  fence_token = idempotency_keys.fence_token + 1
+WHERE
+  idempotency_keys.status = 'started'
   AND idempotency_keys.locked_at < (CURRENT_TIMESTAMP - INTERVAL '5 seconds')
 RETURNING *;
 
@@ -297,11 +300,71 @@ $$ LANGUAGE plpgsql;
 
 ```
 
-#### 4. Accelerated Search Indexing & Collations
+### 4. Specialized Indexing & Physical Access Strategy
 
-- **Time-Sorted PKs:** Uses `uuidv7()` for all primary keys to maintain index ordering and mitigate B-Tree index fragmentation[cite: 1].
-- **Accent-Insensitive Search:** Combines `pg_trgm` GIN indexes with stored generated columns (`f_unaccent(lower(...))`) and ICU Vietnamese collations (`"vi-VN-x-icu"`).
-- **Partial Covering Indexes:** Filters out deleted rows (`WHERE is_deleted = FALSE`) and includes covering payloads (`INCLUDE(...)`) to allow zero-heap Index-Only Scans.
+All indexes are partial (`WHERE is_deleted = FALSE`), ensuring index trees remain compact by automatically purging soft-deleted records from lookup paths. Key index patterns are categorized by their specific query optimization target:
+
+#### A. Zero-Heap Covering Partial Indexes (`INCLUDE` Clause)
+To enable pure **Index-Only Scans** (where PostgreSQL answers queries directly from the B-Tree without fetching table heap pages), critical operational queries use covering payloads:
+* **Debt Lookups (`idx_orders_owed`):**
+  ```sql
+  CREATE INDEX idx_orders_owed ON local_orders (customer_id, owed_due_date ASC, order_id ASC) 
+  INCLUDE (total_cost) 
+  WHERE is_deleted = FALSE AND order_status = 'owed';
+  ```
+* **Line-Item Joins (`idx_order_service_lookup`):**
+```sql
+CREATE INDEX idx_order_service_lookup ON local_order_service (order_id) 
+INCLUDE (service_id, line_item_cost) 
+WHERE is_deleted = FALSE;
+```
+
+#### B. Active State Filtered Queue Navigation
+Instead of indexing the entire orders table, active worker dashboards use a partial index that explicitly excludes terminal states (delivered, owed):
+```sql
+CREATE INDEX idx_orders_active_status_nav ON local_orders (
+    order_status, 
+    planned_pickup_date ASC NULLS LAST, 
+    order_id ASC
+) 
+WHERE is_deleted = FALSE AND order_status != 'delivered' AND order_status != 'owed';
+```
+Impact: Keeps the index tree small (~10% of total table size) while accelerating priority pickup queue sorting (NULLS LAST) for active orders.
+
+#### C. Keyset Pagination & Locale-Aware Composite Indexes
+To support $O(\log N)$ cursor pagination without sorting overhead or `OFFSET` drift:
+* **Vietnamese Alphabetical Collation (`idx_customers_name_vi`):**
+```sql
+CREATE INDEX idx_customers_name_vi ON customers (customer_name COLLATE "vi-VN-x-icu" ASC, customer_id ASC) 
+WHERE is_deleted = FALSE;
+```
+* **Multi-Column Cursor (`idx_orders_customer_id`):**
+```sql
+CREATE INDEX idx_orders_customer_id ON local_orders (customer_id, order_start_date DESC, order_id DESC) 
+WHERE is_deleted = FALSE;
+```
+
+#### D. GIN Inverted Trigram Indexes (Sub-Linear Substring Search)
+Wildcard searches (`ILIKE '%term%'`) bypass $O(N)$ Sequential Scans using Generalized Inverted Indexes (GIN) over unaccented generated columns:
+```sql
+CREATE INDEX idx_customers_customer_name ON customers 
+USING gin (customer_name_search gin_trgm_ops) 
+WHERE is_deleted = FALSE;
+```
+Impact: Converts substring matching into sub-linear inverted trigram bitmap scans.
+
+#### E. Byte-Level & Pattern-Optimized B-Trees
+Bypasses locale overhead for raw numeric string and prefix pattern matching:
+
+* Byte-Level Matching (`idx_customers_customer_phone`): Uses COLLATE "C" for direct byte comparisons on phone numbers.
+```sql
+CREATE INDEX IF NOT EXISTS idx_customers_customer_phone ON customers(customer_phone COLLATE "C" ASC, customer_id ASC) WHERE is_deleted = FALSE;
+```
+
+Pattern-Ops Matching (`idx_users_user_phone_role`): Uses text_pattern_ops to enable prefix matching (LIKE '098%') directly within B-Tree bounds.
+```sql
+CREATE INDEX IF NOT EXISTS idx_users_user_phone_role ON users(user_phone text_pattern_ops, user_role) WHERE is_deleted = FALSE;
+```
 
 ---
 
@@ -328,8 +391,7 @@ Query performance was benchmarked using a seed dataset (`mockdata.sql`) simulati
 - **5,000** Financial records (`local_spending_tickets`).
 
 ### Execution Plan Benchmarking
-
 Index efficiency was verified using `EXPLAIN ANALYZE` following automated database statistic generation (`ANALYZE`):
-
-- Verified transition from $O(N)$ Sequential Scans to $O(\log N)$ Index Scans across the 100k row dataset.
-- Confirmed Index-Only Scan execution on debt lookups via covering partial index `idx_orders_owed`.
+* B-Tree $O(\log N)$ Traversal: Verified transition from $O(N)$ Sequential Scans to $O(\log N)$ Index Scans across the 100k row dataset for phone lookups, primary key fetches, and debt tracking.
+* Zero-Heap Index-Only Scans: Confirmed Index-Only Scan execution on debt lookups via covering partial index `idx_orders_owed`.
+* Trigram Bitmap Scans: Verified sub-linear execution time on wildcard substring searches (`ILIKE '%abc%'`) using `GIN` trigram bitmap index scans over unaccented text columns.
