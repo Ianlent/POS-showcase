@@ -69,10 +69,11 @@ export const UserService = {
 
 			// update idempotency status
 			await IdempotencyRepository.updateSuccess(client, {
-				key: idempotencyKey,
+				key: idempotencyKey.idempotency_key,
 				userId,
 				code: 201,
 				body: { success: true, data: result },
+				fence_token: idempotencyKey.fence_token,
 			});
 			await client.query("COMMIT");
 			return result;
@@ -109,13 +110,7 @@ export const UserService = {
 			const updatedRecord = await UserRepository.updateUser(
 				client,
 				user_id,
-				{
-					user_name,
-					user_phone,
-					user_role,
-					user_status,
-					password_hash,
-				},
+				updateData,
 				is_only_employee,
 			);
 			if (!updatedRecord) {

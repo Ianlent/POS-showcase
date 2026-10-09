@@ -1,9 +1,6 @@
 import { v7 as uuidv7 } from "uuid";
 import pool from "../db.js";
 import { OrderRepository } from "../repositories/orders/orderRepository.js";
-import { UserRepository } from "../repositories/userRepository.js";
-import { CustomerRepository } from "../repositories/customerRepository.js";
-import { ServiceRepository } from "../repositories/serviceRepository.js";
 import { IdempotencyRepository } from "../repositories/idempotencyRepository.js";
 import { orderHelper } from "./ServiceHelper/orderLogic.js";
 import handleCursor from "../utils/handleCursor.js";
@@ -156,10 +153,11 @@ export const OrderService = {
 
 			if (idempotencyKey) {
 				await IdempotencyRepository.updateSuccess(client, {
-					key: idempotencyKey,
+					key: idempotencyKey.idempotency_key,
 					userId: creatorId,
 					code: 201,
 					body: { success: true, data: createdOrder },
+					fence_token: idempotencyKey.fence_token,
 				});
 			}
 			// Commit transaction
@@ -294,10 +292,11 @@ export const OrderService = {
 
 			if (idempotencyKey) {
 				await IdempotencyRepository.updateSuccess(client, {
-					key: idempotencyKey,
+					key: idempotencyKey.idempotency_key,
 					userId: requesterId,
 					code: 200,
 					body: { success: true, data: result },
+					fence_token: idempotencyKey.fence_token,
 				});
 			}
 

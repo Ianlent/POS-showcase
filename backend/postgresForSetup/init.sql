@@ -282,6 +282,7 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
 
 	-- hash of the request body + method + path ensure the intent hasn't changed
 	request_hash				TEXT NOT NULL,
+    fence_token                 INT NOT NULL DEFAULT 0,
 
 	status idempotency_status 	DEFAULT 'started' NOT NULL,
 

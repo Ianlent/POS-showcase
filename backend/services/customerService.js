@@ -49,10 +49,11 @@ export const CustomerService = {
 			);
 
 			await IdempotencyRepository.updateSuccess(client, {
-				key: idempotencyKey,
+				key: idempotencyKey.idempotency_key,
 				userId: creatorId,
 				code: 201,
 				body: { success: true, data: result },
+				fence_token: idempotencyKey.fence_token,
 			});
 			await client.query("COMMIT");
 			return result;
@@ -94,10 +95,11 @@ export const CustomerService = {
 			}
 
 			await IdempotencyRepository.updateSuccess(client, {
-				key: idempotencyKey,
+				key: idempotencyKey.idempotency_key,
 				userId: updaterId,
 				code: 200,
 				body: { success: true, data: result },
+				fence_token: idempotencyKey.fence_token,
 			});
 
 			await client.query("COMMIT");

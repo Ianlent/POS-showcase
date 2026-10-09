@@ -124,6 +124,7 @@ export const UserRepository = {
 				user_status: "user_status",
 				password_hash: "password_hash",
 			};
+			console.log(updateData);
 			let where_clause = [];
 			let setClauses = [];
 			let values = [];

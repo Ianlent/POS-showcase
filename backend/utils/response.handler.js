@@ -18,10 +18,11 @@ const responseError = (req, res, statusCode, message, errorDetails = null) => {
 
 	if (req.idempotencyKey) {
 		IdempotencyRepository.updateFailed({
-			key: req.idempotencyKey,
+			key: req.idempotencyKey.idempotency_key,
 			userId: req.user.user_id,
 			code: statusCode,
 			body: responseBody,
+			fence_token: req.idempotencyKey.fence_token,
 		});
 	}
 

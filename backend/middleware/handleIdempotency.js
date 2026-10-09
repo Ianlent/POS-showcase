@@ -1,8 +1,6 @@
 import crypto from "crypto";
-import responseHandler from "../utils/response.handler.js";
 import { validate as isValidUUID } from "uuid";
 import { IdempotencyRepository } from "../repositories/idempotencyRepository.js";
-import { type } from "os";
 
 function generateRequestHash(req) {
 	// Hash Method + Path + Body to ensure the intent is identical
@@ -65,7 +63,7 @@ export const handleIdempotency = async (req, res, next) => {
 		}
 
 		// Attach key to request so the controller knows which record to update later
-		req.idempotencyKey = key;
+		req.idempotencyKey = record;
 		next();
 	} catch (err) {
 		next(err);

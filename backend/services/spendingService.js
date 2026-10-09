@@ -52,10 +52,11 @@ export const SpendingService = {
 			);
 
 			await IdempotencyRepository.updateSuccess(client, {
-				key: idempotencyKey,
+				key: idempotencyKey.idempotency_key,
 				userId: user_id,
 				code: 201,
 				body: { success: true, data: result },
+				fence_token: idempotencyKey.fence_token,
 			});
 			await client.query("COMMIT");
 			return result;

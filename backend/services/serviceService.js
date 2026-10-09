@@ -45,10 +45,11 @@ export const ServiceService = {
 			// Step 2: Handle idempotency logic
 			if (idempotencyKey) {
 				await IdempotencyRepository.updateSuccess(client, {
-					key: idempotencyKey,
+					key: idempotencyKey.idempotency_key,
 					userId: userId,
 					code: 201,
 					body: { success: true, data: newService },
+					fence_token: idempotencyKey.fence_token,
 				});
 			}
 
