@@ -1,4 +1,4 @@
-﻿# Point-of-Sale & Service CRM System
+# Point-of-Sale & Service CRM System
 
 A high-integrity, event-driven Point-of-Sale (POS) and Customer Relationship Management (CRM) platform designed for localized operational environments (on-premise mini-PC over LAN). Built with a focus on strict database-level invariants, fault-tolerant idempotency, real-time cache synchronization, and $O(\log N)$ query performance under scale.
 
@@ -102,7 +102,7 @@ docker compose down -v
 
 This showcase represents a stable development snapshot of the application. Please note the following operational context:
 
-- **Showcase Scope:** Core infrastructure—including the database engine, idempotency lifecycle, real-time SSE sync, order processing, and CRUD modules—is fully operational[cite: 1, 4].
+- **Showcase Scope:** Core infrastructure—including the database engine, idempotency lifecycle, real-time SSE sync, order processing, and CRUD modules—is fully operational.
 - **Work in Progress (Dashboard):** The main Dashboard view (`/admin/.../dashboard`) currently renders UI placeholders and is not yet wired to live API metrics. To test fully integrated workflows, log in with phone number `0988888888` / password `password` and navigate to other pages via the topbar menu.
 - **First-Boot Initialization:** On the very first run of `docker compose up`, PostgreSQL populates a large dataset (100,000+ records) via `mockdata.sql`. The backend container automatically executes `setup.js` to poll the database and retry until mock data setup and admin seeding complete before opening API ports.
 
@@ -174,8 +174,8 @@ RETURNING *;
 
 #### Key Technical Properties
 
-* **Atomic Lock Stealing:** If a backend process crashes mid-flight, locks stuck in `'started'` state for $>5\text{s}$ are safely acquired by subsequent retries.
-* **Payload Verification (`request_hash`):** Requests using an existing key with a modified payload body trigger an immediate `400 Bad Request`.
+* **Lock Stealing:** If a backend process crashes mid-flight or suffer a GC pause, locks stuck in `'started'` state for $>5\text{s}$ are safely acquired by subsequent retries with the use of fencing token.
+* **Payload Verification (`request_hash`):** Requests using an existing key with a modified payload body trigger an immediate `422` error.
 * **Transaction Binding:** Key completion (`updateSuccess`) shares the database transaction handle (`client`) of the business operation, committing key completion atomically alongside domain records.
 
 ---
@@ -222,7 +222,7 @@ sequenceDiagram
 
 ### Key Implementation Details
 
-- **Transaction-Deferred Triggers:** DB notifications are declared as `CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` to guarantee events emit **only after a successful transaction commit**[cite: 1].
+- **Transaction-Deferred Triggers:** DB notifications are declared as `CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED` to guarantee events emit **only after a successful transaction commit**.
 - **Echo Suppression:** The DB trigger extracts session metadata (`current_setting('app.current_client_id', true)`) to stamp `senderId`[cite: 1]. Express suppresses broadcasts to the originating client socket to eliminate redundant network re-fetches.
 - **RTK Query Cache Mapping:** Database tables are mapped directly to frontend cache tags (e.g., `local_orders` $\rightarrow$ `Order`) to trigger selective client cache invalidations.
 
