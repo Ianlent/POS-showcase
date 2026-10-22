@@ -427,7 +427,6 @@ BEGIN
         EXECUTE format('
             CREATE CONSTRAINT TRIGGER trg_%I_changed
             AFTER INSERT OR UPDATE ON %I
-            DEFERRABLE INITIALLY DEFERRED
             FOR EACH ROW EXECUTE FUNCTION notify_table_change()', t, t);
     END LOOP;
 END $$;
