@@ -25,12 +25,12 @@ An event-driven Point-of-Sale (POS) and Customer Relationship Management (CRM) p
 ## Features
 
 - **Order management:** create, track, and close service orders with line items, discounts, and extra costs. Totals are computed inside the database.
-- **Dual-track order lifecycle:** fulfillment status (`pending` → `delivered`) is tracked separately from payment status (`paid` / `unpaid` / `owed`), with rules enforced by database constraints.
+- **Dual-track order lifecycle:** fulfillment (`pending` ↔ `working` ↔ `completed`) and payment (`unpaid` / `paid`) are tracked separately and join into `delivered` or `owed`, with the rules enforced by database constraints. Authorized users can roll orders back.
 - **Customers & loyalty points:** customer records with points earned and redeemed per order, plus debt tracking for orders owed.
-- **Service catalog & spending tickets:** price definitions for services and financial records for expenses.
-- **Staff accounts:** phone-number login with user roles.
+- **Service catalog & spending tickets:** price definitions for services, and tickets for recording expenses and income.
+- **Staff accounts & access control:** phone-number login, JWT authentication. Stored refresh tokens and role-based permissions defined per endpoint and HTTP method currently only mocked up in database. Accounts can be suspended.
 - **Real-time multi-user sync:** changes made at one terminal appear on the others without a manual refresh.
-- **Safe retries on unreliable LAN:** idempotent POST/PATCH requests prevent double-billing and duplicate orders.
+- **Safe retries on an unreliable LAN:** idempotent POST/PATCH requests prevent double-billing and duplicate orders.
 - **Vietnamese-aware search & sorting:** accent-insensitive substring search and Vietnamese alphabetical collation.
 - **Privacy-minded deletes:** soft-deleting a customer scrubs their personal data.
 
@@ -176,11 +176,22 @@ To prevent double-billing, duplicate orders over an unreliable LAN, and race con
 
 ### Idempotency Engine & Lock Stealing
 
-POST/PATCH requests pass through an idempotency layer that hashes the request payload and recovers automatically from stale locks.
+POST/PATCH requests pass through an idempotency layer that hashes the request payload and recovers from stale locks. Click the diagram for full size.
 
-![idempotency-key-lifecycle](design/idempotency_key_life_cycle.drawio.png)
+[![idempotency-key-lifecycle](design/idempotency_key_life_cycle.drawio.png)](design/idempotency_key_life_cycle.drawio.png)
 
-Lock reservation is a single atomic `UPSERT`:
+How a request carrying an idempotency key is handled:
+
+| Situation                                               | Result                                                                                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Key not seen before                                     | A key is created (`status = started`, `locked_at = now()`) and the request is processed    |
+| Already processed, same payload                         | The stored response is returned without re-running the request                             |
+| Already processed, different payload                    | `422`                                                                                      |
+| Still `started`, lock younger than 5 s                  | `409 Conflict` (the original request is still in flight)                                   |
+| Still `started`, lock older than 5 s, same payload      | The stale lock is stolen (`fence_token` is incremented) and the request is processed again |
+| Still `started`, lock older than 5 s, different payload | `422`                                                                                      |
+
+Lock reservation and stealing happen in a single atomic `UPSERT`:
 
 ```sql
 INSERT INTO idempotency_keys (idempotency_key, user_id, request_hash, status, locked_at)
@@ -197,11 +208,12 @@ RETURNING *;
 
 **Key properties**
 
-- **Atomic lock stealing:** if a backend process crashes mid-request, a lock stuck in `'started'` for more than 5 seconds can be taken over by the next retry. Each takeover increments `fence_token`, so a request that lost its lock can be told apart from the current holder.
-- **Payload verification (`request_hash`):** reusing an existing key with a different request body returns `400 Bad Request` immediately.
+- **Atomic lock stealing:** if a backend process crashes mid-request, a lock stuck in `started` for more than 5 seconds can be taken over by the next retry.
+- **Fencing:** every steal increments `fence_token`. When processing finishes, the result is only committed if the request's fence token still matches the stored one; otherwise the transaction is rolled back. A slow original request therefore cannot overwrite the work of the retry that replaced it.
+- **Payload verification (`request_hash`):** reusing a key with a different request body is rejected with `422`.
+- **Stored outcomes:** both successful and failed results save their response code and body (`response_code`, `response_body`), so a retry gets the same answer.
 - **Transaction binding:** key completion (`updateSuccess`) uses the same database transaction (`client`) as the business operation, so the key is marked complete atomically with the domain records.
-
-<!-- TODO: add one or two sentences on exactly how fence_token is checked at completion time, and whether the 5s timeout is configurable. -->
+- **Expiry:** keys are deleted 24 hours after creation (`idx_idempotency_created_at` supports the cleanup).
 
 ### Explicit Pessimistic Locking
 
@@ -243,34 +255,93 @@ sequenceDiagram
 
 - **Deferred constraint triggers:** notifications come from `CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED`, so they fire at commit time, after other cascading triggers (such as order-total recalculation) have run. The payload therefore reflects the final state of the row. Notifications are also only delivered if the transaction commits.
 - **Echo suppression:** the trigger reads session metadata (`current_setting('app.current_client_id', true)`) and stamps the payload with `senderId`. Express skips the originating client, avoiding a redundant re-fetch.
+- **Coverage:** notify triggers exist on users, customers, orders, spending tickets, and services.
 - **RTK Query cache mapping:** database tables map to frontend cache tags (for example `local_orders` → `Order`), so only the affected cache entries are invalidated.
 
 ---
 
 ## Dual-Track Order State Machine
 
-Fulfillment is tracked separately from the financial lifecycle, and the database enforces the rules on both tracks.
+Fulfillment and payment are tracked as two parallel tracks that join when an order is closed. The database enforces the rules on both. Click the diagram for full size.
 
-![order-life-cycle](design/order_life_cycle.drawio.png)
+[![order-life-cycle](design/order_life_cycle.drawio.png)](design/order_life_cycle.drawio.png)
 
-- **Fulfillment states:** `pending` → `working` → `completed` → `delivered`
-- **Financial states:** `paid` vs. `unpaid` / `owed`
-- **Prepaid invariant:** orders with `is_prepaid = true` skip debt checks and go straight from `completed` to `delivered`. They can never enter the `owed` state.
-- **Audit enforcement:** moving to `delivered` requires non-null `closed_by`, `paid_at`, `payment_method`, and `order_end_date`, enforced by database constraints.
+### Creation
+
+New orders start as `pending` with `order_start_date = now()`, and with `order_end_date`, `owed_due_date`, and `closed_by` all null. `is_prepaid` decides where the payment track starts: prepaid orders begin as **paid** (`paid_at = now()`), all others as **unpaid**.
+
+### The two tracks
+
+| Track       | States                              | Notes                                                                             |
+| ----------- | ----------------------------------- | --------------------------------------------------------------------------------- |
+| Fulfillment | `pending` ↔ `working` ↔ `completed` | Orders can move back and forth between these three                                |
+| Payment     | `unpaid` → `paid`                   | Recording payment sets `paid_at` and `payment_method` (`cash` or `bank_transfer`) |
+
+### Closing an order
+
+| From                   | To          | Effect                                                                                               |
+| ---------------------- | ----------- | ---------------------------------------------------------------------------------------------------- |
+| `completed` and paid   | `delivered` | Sets `closed_by` and `order_end_date = now()`                                                        |
+| `completed` and unpaid | `owed`      | The customer takes the order and pays later; sets `owed_due_date`                                    |
+| `owed`                 | `delivered` | When payment is recorded: sets `paid_at` and `payment_method`, then `closed_by` and `order_end_date` |
+
+### Rollbacks (authorized users only)
+
+- **`delivered` → `completed`:** clears `closed_by` and `order_end_date`. Prepaid orders stay paid; all others go back to unpaid.
+- **`owed` → `completed`:** clears `owed_due_date`.
+- If an order that was previously `owed` and then `delivered` is rolled back and still has an `owed_due_date` stored, the frontend asks whether to keep the old due date or enter a new one, which then overrides the stored value.
+
+### Database-enforced invariants
+
+- **Prepaid:** `is_prepaid = TRUE` requires `paid_at` to be set (`check_order_prepaid`).
+- **Delivered:** requires non-null `order_end_date`, `paid_at`, and `closed_by` (`check_order_status`).
+- **Owed:** requires `paid_at`, `closed_by`, and `order_end_date` to be null, and the order must not be prepaid. Prepaid orders can therefore never be owed.
+- **All other states:** `closed_by` and `order_end_date` must be null.
+- **Dates:** `order_end_date` must be later than `order_start_date` (`check_date_order`).
 
 ---
 
 ## Database Design
 
-![Physical-ERD](design/POS_Physical_ERD.drawio.png)
+Click a diagram to open it full size.
 
-![Trigger-Dependency](design/Trigger_dependency.drawio.png)
+[![Physical-ERD](design/POS_Physical_ERD.drawio.png)](design/POS_Physical_ERD.drawio.png)
 
-### Schema Features (`init.sql`)
+[![Trigger-Dependency](design/Trigger_dependency.drawio.png)](design/Trigger_dependency.drawio.png)
+
+### Core Model
+
+- **Orders:** each order references a customer, the staff member handling it (`handler_id`), and the staff member who closed it (`closed_by`). Line items live in `local_order_service`, keyed by (`order_id`, `service_id`), and point at the service catalog (`local_services`).
+- **Foreign keys:** customers, staff, and services use `ON DELETE RESTRICT`. Line items cascade with their order, and that foreign key is `DEFERRABLE INITIALLY DEFERRED`.
+- **Spending tickets:** expense or income records (`is_expense`) created by a staff member.
+- **Access control:** users ↔ roles ↔ permissions through join tables. A permission is an endpoint plus an HTTP method (`get`, `post`, `put`, `patch`, `delete`). Refresh tokens are stored per user.
+- **Idempotency keys:** one row per (key, user), holding the request hash, status (`started` / `completed` / `failed`), and the stored response.
+- **Primary keys:** UUIDv7 throughout.
+
+### Declarative Constraints
+
+Beyond the order-state rules above, the schema enforces:
+
+- **Discounts:** percentage discounts must be between 0 and 100, fixed discounts must be non-negative (`check_discount_bounds`).
+- **Totals:** `total_cost` and `total_service_cost` must be greater than 0 (`check_positive_total`).
+- **Positive amounts:** customer points and extra cost cannot be negative, and line-item cost, unit counts, service prices, and ticket amounts must be greater than 0.
+
+### Triggers
+
+The dependency graph shows every trigger. By purpose:
+
+| Purpose              | Triggers                                                                            | Behavior                                                                                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Timestamps           | `trg_*_updated` (one per table)                                                     | BEFORE UPDATE: sets `updated_at = now()`                                                                                                                                      |
+| Change notifications | `trg_*_notify` on users, customers, orders, spending tickets, services              | AFTER INSERT/UPDATE, deferred to commit (services: AFTER UPDATE). Feeds the real-time sync                                                                                    |
+| Soft delete          | `trg_user_soft_deleted`, `trg_customer_soft_deleted`, `trg_tombstone_order_service` | When `is_deleted` changes from FALSE to TRUE on a user or customer (customers are scrubbed, see below), and when an order is soft-deleted its line items are soft-deleted too |
+| Delete protection    | `trg_protect_orders`, `trg_protect_order_services`                                  | BEFORE DELETE: only rows already marked `is_deleted = TRUE` can be removed                                                                                                    |
+| Order integrity      | `trg_set_paid_at_prepaid`, `trg_ensure_service_exists`                              | Prepaid orders get `paid_at = now()` on insert; at commit, a new order is checked for line items                                                                              |
+| Total recalculation  | `trg_recalc_order_total_insert`, `trg_recalc_order_total_update`                    | AFTER INSERT/UPDATE on line items: updates the order's `total_service_cost`                                                                                                   |
 
 #### Recursive loop guards
 
-To stop infinite trigger cascades (line-item update → recalculate order total → trigger child updates), triggers use conditional guards:
+Soft-deleting an order cascades `is_deleted` to its line items (`trg_tombstone_order_service`). Each of those updates would normally fire the total-recalculation trigger, which updates the order again. The update trigger therefore only fires when `is_deleted` is unchanged:
 
 ```sql
 CREATE TRIGGER trg_recalc_order_total_update
@@ -280,7 +351,7 @@ WHEN (NEW.is_deleted = OLD.is_deleted) -- Suppresses cascade when soft-deleting
 EXECUTE FUNCTION update_order_total_service_cost();
 ```
 
-#### Generated columns and declarative invariants
+### Generated Columns
 
 Financial totals are calculated in the table definition itself:
 
@@ -294,7 +365,7 @@ total_cost INT GENERATED ALWAYS AS (
 ) STORED
 ```
 
-#### Soft-delete PII scrubbing
+### Soft-Delete PII Scrubbing
 
 Setting `is_deleted = TRUE` on a customer anonymizes their personal data through a PL/pgSQL trigger:
 
@@ -313,7 +384,7 @@ $$ LANGUAGE plpgsql;
 
 ### Indexing Strategy
 
-All indexes are partial (`WHERE is_deleted = FALSE`), so soft-deleted rows never bloat lookup paths. The patterns below are grouped by what they optimize.
+All indexes are partial (`WHERE is_deleted = FALSE`), so soft-deleted rows never bloat lookup paths. The patterns below are grouped by what they optimize. The same patterns repeat on other tables (orders by start date, finish date, handler, and closer; users and services by Vietnamese name and trigram; spending tickets by creator and date; idempotency keys by creation time), and the ERD lists them all.
 
 #### A. Covering partial indexes (`INCLUDE`)
 
@@ -436,6 +507,10 @@ Indexes were checked with `EXPLAIN ANALYZE` after running `ANALYZE` to refresh s
 
 ---
 
-## Acknowledgments
+## Acknowledgements
 
-This project was built with assistance from Gemini 3.5 Flash-Lite.
+This project was built with AI assistance. The code and the initial README were
+generated with assistance from Google Gemini (Gemini 3.5 Flash-Lite) on the free tier, and the README
+was later revised with Anthropic's Claude. The system design (schema, state
+machines, and diagrams) and the decisions behind them are mine. The code has not
+been fully audited, so some details may be inaccurate. See [Project Status](#project-status).
